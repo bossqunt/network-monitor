@@ -1,0 +1,43 @@
+version: '3.8'
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: network_monitor_mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: unknown
+      MYSQL_DATABASE: network_monitor
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./schema.sql:/docker-entrypoint-initdb.d/schema.sql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-punknown"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - monitor_network
+
+  network_monitor:
+    build: .
+    container_name: network_monitor_app
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      - TZ=UTC
+    volumes:
+      - ./config.yaml:/app/config.yaml
+      - ./logs:/app/logs
+    networks:
+      - monitor_network
+    restart: unless-stopped
+
+volumes:
+  mysql_data:
+
+networks:
+  monitor_network:
+    driver: bridge

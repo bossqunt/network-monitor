@@ -1,0 +1,35 @@
+# Network Monitor Configuration
+
+# MySQL Database Settings
+database:
+  host: "mysql"  # Use 'mysql' for Docker, '127.0.0.1' for local
+  port: 3306
+  user: "root"
+  password: "unknown"
+  database: "network_monitor"
+
+# Ping Monitoring Settings
+ping:
+  enabled: true
+  interval_seconds: 10
+  targets:
+    - "google.com"
+    - "8.8.8.8"
+  count: 4  # Number of ping packets per test
+  timeout_seconds: 2
+
+# Traceroute Monitoring Settings
+traceroute:
+  enabled: true
+  interval_seconds: 60
+  targets:
+    - "google.com"
+    - "8.8.8.8"
+  max_hops: 30
+  timeout_seconds: 2
+
+# Speed Test Settings
+speedtest:
+  enabled: true
+  interval_seconds: 600  # 10 minutes
+  server_id: null  # null = auto-select, or specify server ID
