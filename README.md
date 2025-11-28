@@ -1,105 +1,230 @@
 # Network Monitor
 
-A lightweight network monitoring tool that measures ping and traceroute data and stores it in MySQL.
+A lightweight network monitoring tool that measures ping, traceroute, and speed test data and stores it in MySQL.
 
 ## Features
 
 - **Ping Monitoring**: Measures latency, packet loss, and reachability every 10 seconds (configurable)
 - **Traceroute Monitoring**: Tracks network path and hop-by-hop latency every 1 minute (configurable)
+- **Speed Test Monitoring**: Measures download/upload speeds every 5 minutes (configurable)
+- **Connection Status**: Automatically calculates connection quality (excellent, good, fair, poor, down)
 - **MySQL Storage**: All data stored in structured MySQL tables with proper indexing
-- **Concurrent Monitoring**: Both ping and traceroute run in parallel threads
-- **Configurable**: Easy YAML configuration for targets, intervals, and database settings
+- **Concurrent Monitoring**: All monitors run in parallel threads
+- **Docker Support**: Easy deployment with Docker Compose
+- **Grafana Ready**: Pre-built queries for visualization
 
 ## Database Schema
 
 ### Ping Table
-Stores ping test results with:
-- Timestamp (datetime and unix timestamp)
-- Target hostname
-- Resolved IP address
-- Average ping time in milliseconds
-- Packet loss percentage
-- Reachability boolean
+- Timestamp, target, IP address
+- Average ping time, packet loss percentage
+- Reachability status, connection quality
 
 ### Traceroute Table
-Stores traceroute hop data with:
-- Trace ID (UUID to group hops from the same traceroute)
-- Timestamp (datetime and unix timestamp)
-- Target hostname
-- Hop number
-- Hop IP and hostname
-- Round-trip time in milliseconds
-- Packets sent/received
-- Timeout indicator
+- Trace ID (UUID to group hops)
+- Hop details: number, IP, hostname, latency
+- Packet statistics, timeout indicators
 
-## Installation
+### Speed Test Table
+- Download/upload speeds (Mbps)
+- Server information and location
+- ISP, external IP, test duration
 
-1. Install dependencies:
-```powershell
+## Quick Start with Docker
+
+### 1. Using Docker Compose (Recommended)
+
+```bash
+# Start everything (MySQL + Network Monitor)
+docker-compose up -d
+
+# View logs
+docker-compose logs -f network_monitor
+
+# Stop everything
+docker-compose down
+
+# Stop and remove data
+docker-compose down -v
+```
+
+### 2. Configuration
+
+Edit `config.yaml` before starting:
+```yaml
+database:
+  host: "mysql"  # Use 'mysql' for Docker, '127.0.0.1' for local
+  
+ping:
+  interval_seconds: 10
+  targets:
+    - "google.com"
+    - "8.8.8.8"
+    
+traceroute:
+  interval_seconds: 60
+  
+speedtest:
+  interval_seconds: 300  # 5 minutes
+```
+
+### 3. Access MySQL
+
+```bash
+# Connect to MySQL in Docker
+docker exec -it network_monitor_mysql mysql -u root -punknown network_monitor
+
+# Or from host (if port is exposed)
+mysql -h 127.0.0.1 -u root -punknown network_monitor
+```
+
+## Local Installation (Without Docker)
+
+### 1. Install Dependencies
+
+```bash
 pip install -r requirements.txt
 ```
 
-2. Install PyYAML for configuration:
-```powershell
-pip install pyyaml
-```
+### 2. Set Up MySQL
 
-3. Set up the MySQL database:
-```powershell
+```bash
 mysql -u root -p < schema.sql
+# Or use the setup script
+python setup_db.py
 ```
 
-## Configuration
+### 3. Configure
 
-Edit `config.yaml` to configure:
+Copy `config.yaml` and update database host to `127.0.0.1`:
+```bash
+cp config.yaml config.local.yaml
+# Edit config.local.yaml and change host to "127.0.0.1"
+```
 
-- **Database settings**: Host, port, user, password, database name
-- **Ping targets and interval**: Which hosts to ping and how often
-- **Traceroute targets and interval**: Which hosts to trace and how often
-- **Timeouts and packet counts**: Fine-tune monitoring behavior
+### 4. Run
 
-## Usage
-
-Run the network monitor:
-
-```powershell
+```bash
 python network_monitor.py
 ```
 
-The application will:
-1. Connect to MySQL database
-2. Start ping monitoring (default: every 10 seconds)
-3. Start traceroute monitoring (default: every 60 seconds)
-4. Log all activities to console and `network_monitor.log`
+## Running at Startup
 
-Press `Ctrl+C` to stop gracefully.
-
-## Example Queries
-
-View recent ping results:
-```sql
-SELECT * FROM ping ORDER BY timestamp DESC LIMIT 10;
+### Windows - Task Scheduler
+```powershell
+# Run as Administrator
+.\install_service.ps1
 ```
 
-View traceroute for a specific target:
-```sql
-SELECT * FROM traceroute 
-WHERE target = 'google.com' 
-ORDER BY timestamp DESC, hop_number ASC 
-LIMIT 30;
+### Linux - Systemd
+```bash
+# Create service file
+sudo nano /etc/systemd/system/network-monitor.service
+
+# Enable and start
+sudo systemctl enable network-monitor
+sudo systemctl start network-monitor
 ```
 
-Group hops by trace ID:
+## Grafana Integration
+
+All queries are in `grafana_queries.sql`. Import them into Grafana with MySQL data source.
+
+### Key Dashboards:
+1. **Connection Status Over Time** - Real-time quality monitoring
+2. **Ping Latency Graph** - Latency trends
+3. **Packet Loss Tracking** - Network stability
+4. **Speed Test Results** - Download/upload speeds
+5. **Anomaly Detection** - High latency, packet loss, outages
+6. **Traceroute Analysis** - Network path visualization
+
+### Example Grafana Query:
 ```sql
-SELECT trace_id, target, COUNT(*) as hop_count, MAX(hop_number) as max_hops
-FROM traceroute 
-GROUP BY trace_id, target 
-ORDER BY timestamp DESC;
+-- Connection Status (Time Series)
+SELECT 
+    timestamp as time,
+    target as metric,
+    CASE connection_status
+        WHEN 'excellent' THEN 5
+        WHEN 'good' THEN 4
+        WHEN 'fair' THEN 3
+        WHEN 'poor' THEN 2
+        WHEN 'down' THEN 1
+    END as value
+FROM ping
+WHERE $__timeFilter(timestamp)
+ORDER BY timestamp;
 ```
 
-## Requirements
+## Project Structure
 
-- Python 3.7+
-- MySQL 5.7+ or 8.0+
-- Windows (uses `tracert`) or Linux (uses `traceroute`)
-- Administrator/root privileges may be required for ICMP ping operations
+```
+network-monitor/
+├── network_monitor.py      # Main application
+├── ping_monitor.py         # Ping monitoring
+├── traceroute_monitor.py   # Traceroute monitoring
+├── speedtest_monitor.py    # Speed test monitoring
+├── db_utils.py             # Database operations
+├── config_loader.py        # Configuration management
+├── config.yaml             # Configuration file
+├── schema.sql              # Database schema
+├── grafana_queries.sql     # Grafana query templates
+├── Dockerfile              # Docker image
+├── docker-compose.yml      # Docker Compose setup
+└── requirements.txt        # Python dependencies
+```
+
+## Environment Variables
+
+You can override config via environment variables:
+```bash
+DB_HOST=mysql
+DB_USER=root
+DB_PASSWORD=your_password
+DB_NAME=network_monitor
+```
+
+## Troubleshooting
+
+### Docker Issues
+```bash
+# Rebuild containers
+docker-compose up -d --build
+
+# Check logs
+docker-compose logs -f
+
+# Check MySQL connection
+docker exec -it network_monitor_app ping mysql
+```
+
+### Permission Issues
+- Linux: May need `sudo` for ICMP ping
+- Docker: Container runs as non-root user for security
+
+### High Resource Usage
+- Increase ping/traceroute intervals in `config.yaml`
+- Disable speedtest if not needed: `speedtest.enabled: false`
+
+## Development
+
+### Run Tests
+```bash
+python -m pytest tests/
+```
+
+### Update Schema
+```bash
+python update_schema.py
+```
+
+## License
+
+MIT License - feel free to use and modify
+
+## Contributing
+
+Pull requests welcome! Please ensure:
+1. Code follows existing style
+2. All tests pass
+3. Documentation is updated
