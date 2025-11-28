@@ -2,3 +2,5 @@ mysql-connector-python==8.2.0
 pythonping==1.1.4
 pyyaml>=6.0
 speedtest-cli>=2.1.3
+dnspython>=2.4.0
+requests>=2.31.0

@@ -34,9 +34,31 @@ services:
     networks:
       - monitor_network
     restart: unless-stopped
+    cap_add:
+      - NET_RAW
+      - NET_ADMIN
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: network_monitor_grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_INSTALL_PLUGINS=
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning
+    depends_on:
+      - mysql
+    networks:
+      - monitor_network
+    restart: unless-stopped
 
 volumes:
   mysql_data:
+  grafana_data:
 
 networks:
   monitor_network:

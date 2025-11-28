@@ -1,6 +1,6 @@
 """
 Network Monitor - Main Application
-Monitors network connectivity using ping and traceroute
+Monitors network connectivity using ping, traceroute, speedtest, DNS, and HTTP
 Stores results in MySQL database
 """
 import sys
@@ -12,6 +12,8 @@ from db_utils import DatabaseManager
 from ping_monitor import PingMonitor
 from traceroute_monitor import TracerouteMonitor
 from speedtest_monitor import SpeedTestMonitor
+from dns_monitor import DNSMonitor
+from http_monitor import HTTPMonitor
 
 # Configure logging
 logging.basicConfig(
@@ -33,6 +35,8 @@ class NetworkMonitor:
         self.ping_monitor = None
         self.traceroute_monitor = None
         self.speedtest_monitor = None
+        self.dns_monitor = None
+        self.http_monitor = None
         self.config_path = config_path
         self.running = False
     
@@ -69,6 +73,14 @@ class NetworkMonitor:
             self.db_manager,
             self.config['speedtest']
         )
+        self.dns_monitor = DNSMonitor(
+            self.db_manager,
+            self.config.get('dns', {'enabled': False})
+        )
+        self.http_monitor = HTTPMonitor(
+            self.db_manager,
+            self.config.get('http', {'enabled': False})
+        )
         
         logger.info("Initialization complete")
         return True
@@ -85,6 +97,8 @@ class NetworkMonitor:
         self.ping_monitor.start()
         self.traceroute_monitor.start()
         self.speedtest_monitor.start()
+        self.dns_monitor.start()
+        self.http_monitor.start()
         
         logger.info("=" * 60)
         logger.info("All monitors started successfully")
@@ -118,6 +132,12 @@ class NetworkMonitor:
         
         if self.speedtest_monitor:
             self.speedtest_monitor.stop()
+        
+        if self.dns_monitor:
+            self.dns_monitor.stop()
+        
+        if self.http_monitor:
+            self.http_monitor.stop()
         
         # Close database connection
         if self.db_manager:

@@ -1,11 +1,12 @@
 """
-Speed test monitoring module
+Speed test monitoring module with bufferbloat detection
 """
 import time
 import logging
 from datetime import datetime
 from threading import Thread, Event
 import speedtest
+from pythonping import ping as pythonping_ping
 
 logger = logging.getLogger(__name__)
 
@@ -17,7 +18,32 @@ class SpeedTestMonitor:
         self.stop_event = Event()
         self.thread = None
     
-    def perform_speedtest(self, server_id=None):
+    def measure_idle_latency(self, target='8.8.8.8', count=5):
+        """
+        Measure baseline latency when network is idle
+        Returns: average latency in ms
+        """
+        try:
+            response = pythonping_ping(target, count=count, timeout=2)
+            success_count = sum(1 for r in response if r.success)
+            
+            if success_count > 0:
+                ping_times = [r.time_elapsed_ms for r in response if r.success]
+                return sum(ping_times) / len(ping_times)
+            return None
+        except Exception as e:
+            logger.error(f"Error measuring idle latency: {e}")
+            return None
+    
+    def measure_loaded_latency(self, target='8.8.8.8', count=5):
+        """
+        Measure latency while network is under load (during speed test)
+        This should be called during active download/upload
+        Returns: average latency in ms
+        """
+        return self.measure_idle_latency(target, count)
+    
+    def perform_speedtest(self, server_id=None, measure_bufferbloat=True):
         """
         Perform speed test and return results
         Returns: dict with test results or None on error
@@ -81,6 +107,10 @@ class SpeedTestMonitor:
                 'packet_loss': None,
                 'isp': None,
                 'external_ip': None,
+                'idle_latency_ms': None,
+                'download_latency_ms': None,
+                'upload_latency_ms': None,
+                'bufferbloat_rating': None,
                 'test_duration_seconds': None,
                 'is_successful': False,
                 'error_message': str(e)
@@ -104,15 +134,20 @@ class SpeedTestMonitor:
             packet_loss=result['packet_loss'],
             isp=result['isp'],
             external_ip=result['external_ip'],
+            idle_latency_ms=result.get('idle_latency_ms'),
+            download_latency_ms=result.get('download_latency_ms'),
+            upload_latency_ms=result.get('upload_latency_ms'),
+            bufferbloat_rating=result.get('bufferbloat_rating'),
             test_duration_seconds=result['test_duration_seconds'],
             is_successful=result['is_successful'],
             error_message=result['error_message']
         )
         
         if success and result['is_successful']:
+            bufferbloat_str = f", Bufferbloat: {result['bufferbloat_rating']}" if result['bufferbloat_rating'] else ""
             logger.info(f"Speed test completed: Down {result['download_mbps']:.2f} Mbps, "
                        f"Up {result['upload_mbps']:.2f} Mbps, "
-                       f"Ping: {result['ping_ms']:.2f}ms "
+                       f"Ping: {result['ping_ms']:.2f}ms{bufferbloat_str} "
                        f"(Server: {result['server_name']}, {result['server_location']})")
         elif success:
             logger.warning(f"Speed test failed: {result['error_message']}")

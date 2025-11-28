@@ -4,6 +4,7 @@ Ping monitoring module
 import time
 import socket
 import logging
+import statistics
 from datetime import datetime
 from pythonping import ping as pythonping_ping
 from threading import Thread, Event
@@ -28,7 +29,7 @@ class PingMonitor:
     def perform_ping(self, target, count=4, timeout=2):
         """
         Perform ping test and return results
-        Returns: (ip_address, avg_ping_ms, packet_loss, is_reachable)
+        Returns: (ip_address, avg_ping_ms, min_ping_ms, max_ping_ms, jitter_ms, packet_loss, is_reachable)
         """
         try:
             # Resolve IP address
@@ -42,17 +43,29 @@ class PingMonitor:
             packet_loss = ((count - success_count) / count) * 100
             is_reachable = success_count > 0
             
-            # Calculate average ping time for successful pings
+            # Calculate ping time statistics for successful pings
             avg_ping_ms = None
-            if success_count > 0:
-                total_time = sum(r.time_elapsed_ms for r in response if r.success)
-                avg_ping_ms = total_time / success_count
+            min_ping_ms = None
+            max_ping_ms = None
+            jitter_ms = None
             
-            return ip_address, avg_ping_ms, packet_loss, is_reachable
+            if success_count > 0:
+                ping_times = [r.time_elapsed_ms for r in response if r.success]
+                avg_ping_ms = statistics.mean(ping_times)
+                min_ping_ms = min(ping_times)
+                max_ping_ms = max(ping_times)
+                
+                # Calculate jitter as standard deviation
+                if len(ping_times) > 1:
+                    jitter_ms = statistics.stdev(ping_times)
+                else:
+                    jitter_ms = 0.0
+            
+            return ip_address, avg_ping_ms, min_ping_ms, max_ping_ms, jitter_ms, packet_loss, is_reachable
             
         except Exception as e:
             logger.error(f"Error pinging {target}: {e}")
-            return None, None, 100.0, False
+            return None, None, None, None, None, 100.0, False
     
     def calculate_connection_status(self, ping_ms, packet_loss, is_reachable):
         """
@@ -70,7 +83,7 @@ class PingMonitor:
         else:
             return 'excellent'
     
-    def store_ping_result(self, target, ip_address, ping_ms, packet_loss, is_reachable):
+    def store_ping_result(self, target, ip_address, ping_ms, min_ping_ms, max_ping_ms, jitter_ms, packet_loss, is_reachable):
         """Store ping result in database"""
         now = datetime.now()
         unix_timestamp = int(time.time() * 1000)  # milliseconds
@@ -84,6 +97,9 @@ class PingMonitor:
             target=target,
             ip_address=ip_address,
             ping_ms=ping_ms,
+            min_ping_ms=min_ping_ms,
+            max_ping_ms=max_ping_ms,
+            jitter_ms=jitter_ms,
             packet_loss=packet_loss,
             is_reachable=is_reachable,
             connection_status=connection_status
@@ -91,7 +107,8 @@ class PingMonitor:
         
         if success:
             ping_str = f"{ping_ms:.2f}" if ping_ms is not None else "N/A"
-            logger.info(f"Ping {target} ({ip_address}): {ping_str}ms, "
+            jitter_str = f"{jitter_ms:.2f}" if jitter_ms is not None else "N/A"
+            logger.info(f"Ping {target} ({ip_address}): {ping_str}ms (jitter: {jitter_str}ms), "
                        f"Loss: {packet_loss:.1f}%, Status: {connection_status}")
         else:
             logger.error(f"Failed to store ping result for {target}")
@@ -111,11 +128,11 @@ class PingMonitor:
                 if self.stop_event.is_set():
                     break
                 
-                ip_address, ping_ms, packet_loss, is_reachable = self.perform_ping(
+                ip_address, ping_ms, min_ping_ms, max_ping_ms, jitter_ms, packet_loss, is_reachable = self.perform_ping(
                     target, count, timeout
                 )
-                self.store_ping_result(target, ip_address, ping_ms, 
-                                      packet_loss, is_reachable)
+                self.store_ping_result(target, ip_address, ping_ms, min_ping_ms, max_ping_ms, 
+                                      jitter_ms, packet_loss, is_reachable)
             
             # Wait for next interval
             self.stop_event.wait(interval)

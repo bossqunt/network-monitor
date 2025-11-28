@@ -24,7 +24,7 @@ traceroute:
   interval_seconds: 60
   targets:
     - "google.com"
-    - "8.8.8.8"
+    # - "8.8.8.8"
   max_hops: 30
   timeout_seconds: 2
 
@@ -33,3 +33,29 @@ speedtest:
   enabled: true
   interval_seconds: 600  # 10 minutes
   server_id: null  # null = auto-select, or specify server ID
+  measure_bufferbloat: true  # Measure latency under load
+
+# DNS Monitoring Settings
+dns:
+  enabled: true
+  interval_seconds: 60  # 1 minute
+  domains:
+    - "google.com"
+    - "cloudflare.com"
+    - "github.com"
+  nameservers:
+    - "8.8.8.8"        # Google DNS
+    # - "1.1.1.1"        # Cloudflare DNS
+    # - "8.8.4.4"        # Google DNS Secondary
+  record_type: "A"     # A, AAAA, CNAME, MX, etc.
+  timeout_seconds: 5
+
+# HTTP Monitoring Settings
+http:
+  enabled: true
+  interval_seconds: 120  # 2 minutes
+  urls:
+    - "https://www.google.com"
+    # - "https://www.cloudflare.com"
+    # - "https://www.github.com"
+  timeout_seconds: 10

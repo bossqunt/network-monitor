@@ -21,16 +21,16 @@ COPY db_utils.py .
 COPY ping_monitor.py .
 COPY traceroute_monitor.py .
 COPY speedtest_monitor.py .
+COPY dns_monitor.py .
+COPY http_monitor.py .
 COPY network_monitor.py .
 COPY config.yaml .
 
 # Create log directory
 RUN mkdir -p /app/logs
 
-# Run as non-root user
-RUN useradd -m -u 1000 monitor && \
-    chown -R monitor:monitor /app
-USER monitor
+# Note: Running as root to allow ICMP ping operations
+# For production, consider using setcap or alternative ping methods
 
 # Run the application
 CMD ["python", "-u", "network_monitor.py"]
